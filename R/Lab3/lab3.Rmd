@@ -1,0 +1,426 @@
+---
+output:
+  word_document: default
+---
+Упражнения 5.10
+```{r}
+library(fpp2)
+
+```
+
+**1. Daily electricity demand for Victoria, Australia, during 2014 is contained in elecdaily. The data for the first 20 days can be obtained as follows. **
+
+```{r}
+daily20 <- head(elecdaily,20)
+daily20
+```
+
+*a. Plot the data and find the regression model for Demand with temperature as an explanatory variable. Why is there a positive relationship?*
+```{r}
+autoplot(daily20)
+model <- tslm(Demand ~ Temperature, data = daily20)
+model
+```
+
+Между двумя переменными существует положительная зависимость. Вероятно, по мере повышения температуры включены были кондиционеры, что увеличило энергопотребление.
+
+*b. Produce a residual plot. Is the model adequate? Are there any outliers or influential observations?* 
+```{r}
+checkresiduals(model$residuals)
+```
+Нормальная модель, остатки не коррелируют друг с другом. Был outlier.
+
+*c. Use the model to forecast the electricity demand that you would expect for the next day if the maximum temperature was 15 and compare it with the forecast if the maximum temperature was 35. Do you believe these forecasts?*
+```{r}
+lm_forecast <- forecast(model,
+  newdata=data.frame(Temperature=c(15,35)))
+lm_forecast
+```
+Думаю, модель предсказала правильно, потому что прогнозируемые температуры близки к температурам в данных.
+
+*d. Give prediction intervals for your forecasts. The following R code will get you started:*
+```{r}
+autoplot(daily20, facets=TRUE)
+daily20 %>%
+  as.data.frame() %>%
+  ggplot(aes(x=Temperature, y=Demand)) +
+  geom_point() +
+  geom_smooth(method="lm", se=FALSE)
+fit <- tslm(Demand ~ Temperature, data=daily20)
+checkresiduals(fit)
+forecast(fit, newdata=data.frame(Temperature=c(15,35)))
+```
+80% intervals
+```{r}
+lm_forecast$upper[,1]
+lm_forecast$lower[,1]
+```
+95% intervals
+```{r}
+lm_forecast$upper[,2]
+lm_forecast$lower[,2]
+```
+
+*e. Plot Demand vs Temperature for all of the available data in elecdaily. What does this say about your model?*
+```{r}
+elecdaily %>%
+  as.data.frame() %>%
+  ggplot(aes(x=Temperature, y=Demand)) +
+    ylab("Demand") +
+    xlab("Temp") +
+    geom_point() +
+    geom_smooth(method="lm", se=FALSE)
+
+```
+График результатов показывает, что модель некорректно работает на более длительных промежутках времени, она была построена на не слишком большом количестве данных, видно, что простая линейная регрессия недостаточна в этом случае.
+
+
+
+**2. Data set mens400 contains the winning times (in seconds) for the men's 400 meters final in each Olympic Games from 1896 to 2016.**
+*a. Plot the winning time against the year. Describe the main features of the plot.*
+
+```{r}
+
+autoplot(mens400)
+```
+
+1) Тренд - рекордное время побед в финале олимпийских соревнований по бегу на 400 м среди мужчин со временем уменьшалось.
+2) Есть отсутствующие значения значения.
+
+*b. Fit a regression line to the data. Obviously the winning times have been decreasing, but at what average rate per year? Extract time part from mens400 time series to do linear modeling.*
+```{r}
+m4_time <- time(mens400)
+m4_tslm <- tslm(mens400 ~ m4_time, data = mens400)
+autoplot(mens400) +
+  geom_abline(slope = m4_tslm$coefficients[2],
+              intercept = m4_tslm$coefficients[1],
+              colour = "red")
+```
+Коэффициент убывания
+```{r}
+m4_tslm$coefficients[2]
+```
+Уменьшается на 0.06457 секунды в год в среднем.
+
+*c. Plot the residuals against the year. What does this indicate about the suitability of the fitted line?*
+
+```{r}
+cbind(Time = m4_time, 
+      Residuals = m4_tslm$residuals) %>%
+  as.data.frame() %>%
+  ggplot(aes(x = Time, y = Residuals)) +
+    geom_point() +
+    ylab("Residuals")
+ 
+checkresiduals(m4_tslm)
+```
+График остатков показывает, что  модель в целом хорошо соответствует данным для краткосрочных прогнозов.
+
+*d. Predict the winning time for the men's 400 meters final in the 2020 Olympics. Give a prediction interval for your forecasts. What assumptions have you made in these calculations?*
+
+Построил линейную модель с исключением отсутствующих значений.
+```{r}
+m4_lm <- lm(
+  mens400 ~ m4_time, 
+  data = mens400,
+  na.action = na.exclude
+  )
+
+m4_forecast <- forecast(
+  m4_lm, 
+  newdata = data.frame(m4_time = 2020)
+  )
+
+autoplot(mens400) +
+  autolayer(m4_forecast, PI = TRUE)
+```
+Доверительные интервалы
+```{r}
+m4_forecast$upper
+m4_forecast$lower
+```
+ 80% интервал: 40.45 - 43.63
+ 95% интервал: 39.55 - 44.53
+ 
+Расчеты были сделаны из предположения, что остатки модели были нормально распределены. Но видно по результату функции checkresiduals, что это не так.
+
+
+**3. Type easter(ausbeer) and interpret what you see.**
+
+Квартальные анные о производстве пива в Австралии в период Пасхи (Easter), 1- в период была Пасха, 0 - не было, или дробное, если часть квартала пришлось на Пасху. 218 значений, начало - 1-й квартал 1956 г., последнее измерение - 2-й квартал 2010 г.
+```{r}
+easter(ausbeer)
+```
+
+**4. An elasticity coefficient is the ratio of the percentage change in the forecast variable (y) to the percentage change in the predictor variable (x). Mathematically, the elasticity is defined as (dy/dx)x(x/y). Consider the log-log model, log y = β0 + β1 logx+ε.Express y as a function of x and show that the coefficient β1 is the elasticity coefficient.**
+
+log(y) = β0 + β1log(x) + ε
+e^log(y) = e^(β+β1log(x) + ε)
+y = e^(β + ε) x^c => выразил у как функция от x
+
+Покажем, что β1 - коэффициент эластичности.
+log(y) = β0 + β1log(x) + ε
+β1log(x) = log(y) - β0 - ε
+β1 = (log(y) - β0 - ε) / log(x)
+
+Таким образом, коэффициент β1 является коэффициентом эластичности, поскольку он показывает отношение процентного изменения прогнозируемой переменной (y) к изменению независимой переменной x. Для каждого изменения в x существует процентное изменение отношения β1 в y.
+
+
+**5. The data set fancy concerns the monthly sales figures of a shop which opened in January 1987 and sells gifts, souvenirs, and novelties. The shop is situated on the wharf at a beach resort town in Queensland, Australia. The sales volume varies with the seasonal population of tourists. There is a large influx of visitors to the town at Christmas and for the local surfing festival, held every March since 1988. Over time, the shop has expanded its premises, range of products, and staff.**
+
+
+ *a. Produce a time plot of the data and describe the patterns in the graph. Identify any unusual or unexpected fluctuations in the time series.*
+```{r}
+ggseasonplot(fancy)
+autoplot(fancy)
+```
+Продажи в целом увеличивались с января по декабрь. Потом резко росли в декабре. В 1991 году продажи упали в декабре, по сравнения с предыдущими годами увеличения. Еще каждый март также наблюдался рост, но он был меньше, чем рост в декабре.
+
+*b. Explain why it is necessary to take logarithms of these data before fitting a model.*
+Размер сезонных колебаний должен быть почти одинаковым (стационарным), чтобы хорошо соответствовать модели. Данные показывают, что сезонные колебания увеличиваются по экспоненте. Поэтому необходимо логарифмировать данные. К тому же, если в наборе данных существует закономерность, остатки могут быть неоднородными, их дисперсия можеть быть непостоянной и приводить к проблемам в регрессии.
+
+*c. Use R to fit a regression model to the logarithms of these sales data with a linear trend, seasonal dummies and a "surfing festival" dummy variable.*
+
+Создадим фиктивную переменную "surfing_festival". Значение равно 1, если год > 1988, а месяц - март.
+
+```{r}
+Time <- time(fancy)
+surfing_festival <- c()
+for(i in 1:length(Time)){
+  month <- round(12*(Time[i] - floor(Time[i]))) + 1
+  year <- floor(Time[i])
+  if(year >= 1988 & month == 3){
+    surfing_festival[i] <- 1
+  } else {
+    surfing_festival[i] <- 0
+  }
+}
+
+fn_log_lm <- tslm(
+  BoxCox(fancy, 0) ~ trend + season + surfing_festival
+  )
+summary(fn_log_lm)
+```
+*d. Plot the residuals against time and against the fitted values. Do these plots reveal any problems with the model?*
+```{r}
+autoplot(fn_log_lm$residuals)
+```
+Остатки зависят от времени. Это означает, что существует корреляция между остатками и временем.
+```{r}
+cbind(Residuals = fn_log_lm$residuals,
+      Fitted_values = fn_log_lm$fitted.values) %>%
+  as.data.frame() %>%
+  ggplot(aes(x = Fitted_values,
+             y = Residuals)) +
+    geom_point()
+```
+Размер остатков изменяется по мере продвижения по оси спрогнозированных значений. Значит, что даже после логарифмического преобразования ошибки все еще остаются неоднородными.
+
+*e. Do boxplots of the residuals for each month. Does this reveal any problems with the model?*
+```{r}
+cbind.data.frame(
+    Month = factor(
+      month.abb[round(12*(Time - floor(Time)) + 1)],
+      labels = month.abb,
+      ordered = TRUE
+    ),
+    Residuals = fn_log_lm$residuals
+    ) %>%
+  ggplot(aes(x = Month,
+             y = Residuals)) +
+    geom_boxplot()
+```
+
+Несколько месяцев распределение остатков было несимметричным. И в течение некоторых месяцев среднее остатков не равнялась 0. Такие остатки не нормально распределны, что усложняет получение точного интервала прогноза.
+
+*f. What do the values of the coefficients tell you about each variable?*
+```{r}
+fn_log_lm$coefficients
+```
+Модель имеет положительный тренд (с течением времени объем продаж увеличивается). Все сезонные переменные положительны (объем продаж минимален в январе, а продажи в другие месяцы больше января в течение большего времени). surfing_festival равен 0.501, тем самым вносит большой вклад в итоговые продажи, то есть, когда проводится фестиваль серфинга, продажи растут.
+
+*g. What does the Breusch-Godfrey test tell you about your model?*
+```{r}
+checkresiduals(fn_log_lm)
+```
+Значение p-теста меньше 0.05. Это означает, что есть автокорреляция в остатках.
+
+ *h. Regardless of your answers to the above questions, use your regression model to predict the monthly sales for 1994, 1995, and 1996. Produce prediction intervals for each of your forecasts.*
+```{r}
+#попытка скорректировать модель на мартовсие всплески продаж
+future_fancy <- rep(0, 36)
+for(i in 1:36){
+  if(i %% 12 == 3){
+    future_fancy[i] <- 1
+  }
+}
+
+future_fancy <- ts(data = future_fancy,
+                   start = 1994,
+                   end = c(1996, 12),
+                   frequency = 12)
+
+
+fn_log_lm_forecast <- forecast(
+  fn_log_lm,
+  newdata = data.frame(Time = time(future_fancy),
+                       surfing_festival = future_fancy)
+)
+
+autoplot(fn_log_lm_forecast)
+```
+Доверительные интервалы
+```{r}
+fn_log_lm_forecast$upper
+fn_log_lm_forecast$lower
+```
+
+*i. Transform your predictions and intervals to obtain predictions and intervals for the raw data.*
+
+```{r}
+fn_log_lm_forecast_transform <- fn_log_lm_forecast
+
+log_trans <- c('x', 'mean', 'lower', 'upper', 'residuals', 'fitted')
+
+fn_log_lm_forecast_transform[log_trans] <- lapply(
+  fn_log_lm_forecast[log_trans],
+  InvBoxCox,
+  lambda = 0
+)
+
+```
+
+Перевести log в boxcox
+```{r}
+fn_log_lm_forecast_transform[['model']][['model']][1] <- lapply(
+  fn_log_lm_forecast[['model']][['model']][1],
+  InvBoxCox,
+  lambda = 0
+)
+autoplot(fn_log_lm_forecast_transform)
+```
+
+Интервалы
+```{r}
+fn_log_lm_forecast_transform$upper
+fn_log_lm_forecast_transform$lower
+```
+
+*j. How could you improve these predictions by modifying the model?*
+
+Можно попробовать избавиться от каких-то предикторов, если есть взаимная корреляция. Также можно попробовать добавить смещенные по времени копии переменных (lagged copies)
+
+**6. The gasoline series consists of weekly data for supplies of US finished motor gasoline product, from 2 February 1991 to 20 January 2017. The units are in "thousand barrels per day". Consider only the data to the end of 2004.**
+ 
+ *a. Fit a harmonic regression with trend to the data. Experiment with changing the number Fourier terms. Plot the observed gasoline and fitted values and comment on what you see.*
+```{r}
+head(gasoline)
+autoplot(gasoline)
+
+gas <- window(gasoline, end = 2005)
+
+
+gas_m1 = tslm(gas ~ trend + fourier(gas, K=5))
+gas_m2 = tslm(gas ~ trend + fourier(gas, K=10))
+gas_m3 = tslm(gas ~ trend + fourier(gas, K=15))
+gas_m4 = tslm(gas ~ trend + fourier(gas, K=20))
+
+autoplot(gas, ylab = "Gas",main= "Fourier") +autolayer(fitted(gas_m1))
+autoplot(gas, ylab = "Gas",main= "Fourier") +autolayer(fitted(gas_m2))
+autoplot(gas, ylab = "Gas",main= "Fourier") +autolayer(fitted(gas_m3))
+autoplot(gas, ylab = "Gas",main= "Fourier") +autolayer(fitted(gas_m4))
+```
+Чем больше пар Фурье используется, тем больше модель дает данные, похожие на исходные, но тренд не удается сохранить при этом.
+
+*b. Select the appropriate number of Fourier terms to include by minimizing the AICc or CV value.*
+```{r}
+CV(gas_m1)
+CV(gas_m2)
+CV(gas_m3)
+CV(gas_m4)
+```
+gas_m2 выбираем, так как у нее самые низкие CV и AIC.
+
+*c. Check the residuals of the final model using the checkresiduals() function. Even though the residuals fail the correlation tests, the results are probably not severe enough to make much difference to the forecasts and prediction intervals. (Note that the correlations are relatively small, even though they are significant.)*
+```{r}
+
+checkresiduals(gas_m2)
+```
+*d. To forecast using harmonic regression, you will need to generate the future values of the Fourier terms. *
+```{r}
+gas_fc <- forecast(gas_m2, newdata=data.frame(fourier(gas,10,52)))
+gas_fc
+```
+
+ *e. Plot the forecasts along with the actual data for 2005. What do you find?*
+```{r}
+gas2005 = window(gasoline, start=2004, end=2006)
+autoplot(gas2005, series = "Actual")+ autolayer(gas_fc$mean, series = "Forecast")
+```
+Почти все данные находились в интервале 80% прогноза. Модель не могла предсказать внезапное падение осенью, оно было больше ожидаемого.
+
+
+**7. Data set huron gives the water level of Lake Huron in feet from 1875-1972.**
+
+*a. Plot the data and comment on its features.*
+```{r}
+autoplot(huron)
+head(huron)
+```
+Много колебаний, которые показывают цикл. И примерно до 1930 года был тренд на убывание, но после исчез.
+
+ *b. Fit a linear regression and compare this to a piecewise linear trend model with a knot at 1915.*
+```{r}
+
+h_lm <- tslm(huron ~ trend)
+
+t <- time(huron)
+t.break <- 1915
+t_piece <- ts(pmax(0,t-t.break), start=1875)
+
+h_pw <- tslm(huron ~ t + t_piece)
+
+summary(h_lm)
+summary(h_pw)
+
+autoplot(huron) +
+autolayer(fitted(h_lm), series = "Linear") +
+autolayer(fitted(h_pw), series = "Piecewise")
+```
+Линейная модель и не cмогла отразить изменение тренда с 1915 года, в отличие от кусочно-линейной модели.
+
+ *c. Generate forecasts from these two models for the period upto 1980 and comment on these.*
+```{r}
+h = 14
+t_new <- t[length(t)]+seq(h)
+t_piece_new <- t_piece[length(t_piece)]+seq(h)
+  
+newdata <- cbind(t=t_new,
+                 t_piece=t_piece_new) %>%
+  as.data.frame()
+
+h_pw_lm_forecast <- forecast(
+  h_pw,
+  newdata = newdata
+  )
+
+h_lm_forecast <- forecast(h_lm, newdata = newdata)
+
+h_lm_forecast
+h_pw_lm_forecast
+
+autoplot(huron) +
+autolayer(fitted(h_lm), series = "Linear") +
+autolayer(fitted(h_pw), series = "Piecewise") +
+autolayer(h_lm_forecast, series = "Linear") +
+autolayer(h_pw_lm_forecast, series="Piecewise") +
+xlab("Year") +  ylab("Water level") +
+guides(colour=guide_legend(title=" "))
+```
+Модель линейной регрессии показывает, что точечные прогнозы, а также верхняя и нижняя границы интервалов прогнозирования уменьшаются с течением времени. Она не отразила изменение тренда в 1915 году.
+Модель кусочно-линейной регрессии показывает, что точечные прогнозы и интервалы прогнозирования практически одинаковы во времени и отражает смену тренда 1915 года.
+
+**8 задание**
+![Alt text](/Users/vladislavklyuev/Documents/BSU/Математическое и компьютерное прогнозирование/Lab3/PNG/1.png)
+![Alt text](/Users/vladislavklyuev/Documents/BSU/Математическое и компьютерное прогнозирование/Lab3/PNG/2.png)
+

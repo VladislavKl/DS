@@ -1,0 +1,51 @@
+---
+output: word_document
+---
+#Лабораторный практикум c R
+
+**Преподаватель**
+```
+Дорошко Ольга Валерьевна
+```
+**Студент**
+```
+Клюев Владислав Дмитриевич, 1 курс, Аналитическая логистика
+```
+
+
+# Задание 2. Прогнозирование эпидемиологической ситуации
+
+Это задача прогнозирования временных рядов. Сначала считаем данные, выберем количество случаев в провинции Манитоба в Канаде, выберем даты выборки данных и переведем в формат time series (ts), проиллюстрируем наглядно на графике.
+```{r}
+library(forecast)
+library(tseries)
+
+options(warn=-1)
+
+data <- read.csv2('https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv',sep=',',stringsAsFactors = FALSE,header = TRUE)
+data = data[data$Province.State == "Manitoba",]
+data = unlist(data, use.names = FALSE)
+data = as.numeric(data)
+data = data[5:length(data)]
+idx <- seq(as.Date("2020-01-22"), Sys.Date()-1, by = "day")
+ser <- ts(data, start = c(2020, as.numeric(format(idx[1], "%j"))), frequency = 365)
+plot.ts(ser)
+```
+
+Для построения прогноза будем использовать модель типа ARIMA. Конечно, можно было это сделать вручную, сначала с помощью дифференцирования приведя ряд к стационарному (функция diff(data, differences=x)) и проверив его на стационарность с помощью теста Дики-Фулера (adf.test(data)), подобрать p и q для модели, с помощью acf() и pcf(), но если можно это сделать автоматически, то так и поступим.
+```{r}
+auto.arima(ser)
+```
+Чудесно, теперь построим модель ARIMA, используя автоматически найденные коэффициенты. Построим график исходных данных и полученных в результате предсказания.
+```{r}
+serarima <- arima(ser, order=c(3,2,2))
+plot(ser)
+lines(fitted(serarima), col='red')
+```
+
+Построим предсказание числа заболевших на ближайшие 7 дней с уровнем уверенности 95% для доверительного интервала (я не совсем знаю, как это правильно сказать на русском: confidence level of 95% for prediction intervals). Он также даст точечное предсказание. Изобразим на графике.
+```{r}
+serarimaforecast <- forecast(serarima, h=7, level=c(95))
+plot(serarimaforecast)
+serarimaforecast
+```
